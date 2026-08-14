@@ -1,6 +1,7 @@
 import os
-from time import time
-
+import time
+import pandas as pd
+from services.persistence.exercise import get_users_exercises
 import streamlit as st
 from services.auth.login_wall import login_wall
 from services.state.session_default import initial_session_default
@@ -22,7 +23,7 @@ def main():
 
     load_css(os.path.join(os.getcwd(),"static","style.css"))
     inject_local_font(os.path.join(os.getcwd(),"static","AdobeClean-Regular.otf"),"Adobe Clean")
-    st.write("Welcome to the Real-Time GYM Trainer application!")
+    
 
     workout_started = st.session_state.get("workout_started", False)
     with st.sidebar:
@@ -69,9 +70,10 @@ def main():
             exercise = st.session_state.get("exercise_type")
             sets = st.session_state.get("target_sets")
             reps = st.session_state.get("reps_per_set")
-            print(exercise, sets, reps)
-            st.info(f"Workout in progress: {exercise} - {sets} sets of {reps} reps")
-            end_session_button =st.button("End Session", width="stretch", key="end_session_button")
+
+            st.info(f"**{exercise}** -- {sets} Sets / {reps} Reps")
+
+            end_session_button = st.button("End Workout", key="end_session_button", width="stretch")
 
             if end_session_button:
                 st.session_state["workout_started"]=False
@@ -90,46 +92,50 @@ def main():
             st.divider()
 
             exercise = st.session_state.get("exercise_type")
-            total_reps=st.session_state.get("reps")
-            reps_per_sets=st.session_state.get("reps_per_set")
-            current_set_reps=st.session_state.get("current_set_reps")
-            sets_completed=st.session_state.get("sets_completed")
-            target_sets=st.session_state.get("target_sets")
-            st.subheader("Workout Progress")
+            total_reps = st.session_state.get("reps")
+            current_set_reps = st.session_state.get("current_set_reps")
+            reps_per_set = st.session_state.get("reps_per_set")
+            sets_completed = st.session_state.get("sets_completed")
+            target_sets = st.session_state.get("target_sets")
 
-            col1, col2, col3 = st.columns(3)
+            st.subheader("Progress")
 
-            with col1:
-                st.metric("Total Reps", total_reps)
-
-            with col2:
-                st.metric("Current Set", current_set_reps)
-
-            with col3:
-                st.metric("Sets", f"{sets_completed}/{target_sets}")
-
+            st.metric("Total Reps", f"{total_reps}")
+            st.metric("Current Set Reps", f"{current_set_reps} / {reps_per_set}")
+            st.metric("Sets Completed", f"{sets_completed} / {target_sets}")
 
             st.divider()
 
-            exercise_info = EXERCISE_METRICS.get(exercise)
+            if exercise == "Squats":
+                st.subheader("Squat Metrics")
+                st.metric("Knee Angle", f"{st.session_state.knee_angle}°")
+                st.metric("Back Angle", f"{st.session_state.back_angle}°")
+                st.metric("Depth Status", st.session_state.depth_status)
 
-            if exercise_info:
-                st.subheader(exercise_info["title"])
+            elif exercise == "Push-ups":
+                st.subheader("Push-up Metrics")
+                st.metric("Elbow Angle", f"{st.session_state.elbow_angle}°")
+                st.metric("Body Alignment", st.session_state.body_alignment)
+                st.metric("Hip Position", st.session_state.hip_status)
 
-                for label, key, value_type in exercise_info["metrics"]:
+            elif exercise == "Biceps Curls (Dumbbell)":
+                st.subheader("Curl Metrics")
+                st.metric("Elbow Angle", f"{st.session_state.elbow_angle}°")
+                st.metric("Shoulder Stability", st.session_state.shoulder_status)
+                st.metric("Swing Detection", st.session_state.swing_status)
 
-                    value = st.session_state.get(key)
+            elif exercise == "Shoulder Press":
+                st.subheader("Shoulder Press Metrics")
+                st.metric("Elbow Angle", f"{st.session_state.elbow_angle}°")
+                st.metric("Arm Extension", st.session_state.extension_status)
+                st.metric("Back Arch", st.session_state.back_arch_status)
 
-                    if value is None:
-                        if value_type == "angle":
-                            value = 0.0
-                        else:
-                            value = "N/A"
+            elif exercise == "Lunges":
+                st.subheader("Lunge Metrics")
+                st.metric("Front Knee Angle", f"{st.session_state.front_knee_angle}°")
+                st.metric("Torso Angle", f"{st.session_state.torso_angle}°")
+                st.metric("Balance Status", st.session_state.balance_status)
 
-                    if value_type == "angle":
-                        st.metric(label, f"{float(value):.1f}°")
-                    else:
-                        st.metric(label, value)
 
     st.title("AI Real-time GYM coach")
     st.markdown("#### real time pose detection with proactiv AI voice coaching ")
@@ -165,9 +171,49 @@ def main():
             
         )
 
-    sync_metrics_update(context)
-    inject_webrtc_styles()
+        sync_metrics_update(context)
+
+        if context.state.playing:
+            time.sleep(0.25)
+            st.rerun()
+        inject_webrtc_styles()
+
+    st.divider()
     st.markdown("#### workout History")
+
+    user_id =st.session_state.get("user_id",0)
+
+    if isinstance(user_id,int):
+        history_rows=get_users_exercises(user_id)
+
+        arr=[
+            {
+                "Exercise":row['exercise_name'],
+                "Reps":row['reps'],
+                "Sets":row['sets'],
+                "Time (s)":row['time'],
+                "Date":row['created_at']
+            }
+            for row in history_rows
+        ]
+
+        df =pd.DataFrame(arr)
+
+        if not df.empty:
+           
+            df["Date"]=pd.to_datetime(df["Date"]).dt.date
+            agg_df=df.groupby(["Exercise","Date"]).agg({
+                "Reps":"sum",
+                "Sets":"sum",
+                "Time (s)":"sum"
+            }).reset_index()
+            agg_df.index += 1
+            st.table(agg_df,border="horizontal")
+
+        else:
+            st.info("No workout history found. Start your first session to see your progress here!")
+
+
 
     
 if __name__ == "__main__":

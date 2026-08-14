@@ -29,11 +29,12 @@ EXERCISE_METRICS = {
     "shoulder_press": {
         "title": "🏋️ Shoulder Press Metrics",
         "metrics": [
-            ("Shoulder Angle", "shoulder_angle", "angle"),
             ("Elbow Angle", "elbow_angle", "angle"),
-            ("Torso Angle", "torso_angle", "angle"),
+            ("Back Angle", "back_angle", "angle"),
+            ("Arm Extension", "extension_status", "text"),
+            ("Back Arch", "back_arch_status", "text"),
         ],
-    },
+},
 
     "Lunges": {
         "title": "🦵 Lunge Metrics",
