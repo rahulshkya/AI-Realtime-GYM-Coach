@@ -1,6 +1,10 @@
 import os
 import time
+from groq import Groq
 import pandas as pd
+from services.coaching.llm import LLMCoach
+from services.coaching.tts import TextToSpeech
+from services.coaching.voice_pipeline import VoicePipeline, autoplay_audio
 from services.persistence.exercise import get_users_exercises
 import streamlit as st
 from services.auth.login_wall import login_wall
@@ -14,9 +18,26 @@ from services.config.metrics_config import EXERCISE_METRICS
 from services.vision.exercise_video_processor import VideoProcessorClass
 
 def main():
+    
+    st.set_page_config(page_title=" 💪 A Real-Time GYM Trainer", page_icon="💪", layout="centered", initial_sidebar_state="expanded")
     init_db()
     initial_session_default()
-    st.set_page_config(page_title="💪 A Real-Time GYM Trainer", page_icon="💪", layout="centered", initial_sidebar_state="expanded")
+    if "voice_pipeline" not in st.session_state:
+        try:
+            api_key =os.environ.get("GROQ_API_KEY","")
+            if not api_key and hasattr(st,"secrets") and "GROQ_API_KEY" in st.secrets:
+                api_key = st.secrets["GROQ_API_KEY"]
+
+            groq_client=Groq(api_key=api_key)
+            llm_coach=LLMCoach(groq_client)
+            tts=TextToSpeech()
+            st.session_state.voice_pipeline = VoicePipeline(llm_coach,tts)
+
+        except Exception as e:
+            print(f"Error initializing voice pipeline: {e}")
+            st.session_state.voice_pipeline =None
+            st.error("Failed to initialize voice pipeline.")
+    st.set_page_config(page_title=" 💪 A Real-Time GYM Trainer", page_icon="💪", layout="centered", initial_sidebar_state="expanded")
     if not login_wall():
         return
 
@@ -86,6 +107,18 @@ def main():
                 st.session_state["last_saved_sets_completed"]=0
                 st.session_state["set_cycle_started_at"]=0.0
                 st.session_state["last_exercise_type"]="Squats"
+
+                if st.session_state.voice_pipeline:
+                    result=st.session_state.voice_pipeline.process_event(
+                        event="workout_completed",
+                        exercise=exercise,
+                        metrics={}
+                    )
+
+
+                    if result:
+                        st.session_state.audio_to_play, st.session_state.coach_feedback =result
+
                 st.rerun()
 
         if workout_started:
@@ -139,6 +172,13 @@ def main():
 
     st.title("AI Real-time GYM coach")
     st.markdown("#### real time pose detection with proactiv AI voice coaching ")
+
+    if st.session_state.get("audio_to_play"):
+        autoplay_audio(st.session_state.audio_to_play)
+
+    if st.session_state.get("coach_feedback"):
+        st.markdown("")
+        st.success(f"**Coach Feedback:** {st.session_state.coach_feedback}")
 
     if not workout_started:
         st.markdown("""

@@ -209,7 +209,7 @@ class VideoProcessorClass(VideoProcessorBase):
             self._draw_skeleton(image, landmarks)
 
             ex_type = self.get_exercise()
-            print("VideoProcessor Exercise:", ex_type)
+            
             detector = self._detectors.get(ex_type)
 
             if detector:
