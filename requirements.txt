@@ -2,7 +2,7 @@ streamlit
 streamlit-webrtc
 mediapipe==0.10.21
 opencv-python-headless==4.10.0.84
-groq
+groq>=0.31.0
 gtts
 av
 numpy
